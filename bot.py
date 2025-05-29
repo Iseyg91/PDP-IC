@@ -51,6 +51,8 @@ status_message = None  # Pour stocker le message envoyé
 # --- ID Owner Bot ---
 ISEY_ID = 792755123587645461
 ID_CANAL = 1376899306719547503
+CASS_ID = 873176863965589564
+SHADOW_ID = 945762223366746142
 
 # --- ID PROJECT : DELTA SERVER ---
 GUILD_ID = 1359963854200639498
@@ -75,7 +77,7 @@ SUPPORT_ROLE_ID = 1359963854422933876
 SALON_REPORT_ID = 1361362788672344290
 ROLE_REPORT_ID = 1362339195380568085
 TRANSCRIPT_CHANNEL_ID = 1361669998665535499
-STATUT_ID = 1360361796464021745
+STATUT_ID = 1377577761153220689
 
 # --- ID Gestion Clients Delta ---
 LOG_CHANNEL_RETIRE_ID = 1360864806957092934
@@ -98,6 +100,12 @@ log_channels = {
     "bots": 1361669985705132172,
     "tickets": 1361669998665535499,
     "boosts": 1361670102818230324
+}
+
+TIER_LIMITS = {
+    "low": 1,
+    "medium": 3,
+    "high": 5
 }
 
 def get_log_channel(guild, key):
@@ -150,6 +158,7 @@ collection27 = db['guild_troll'] #Stock les serveur ou les commandes troll sont 
 collection28 = db['sensible'] #Stock les mots sensibles actif des serveurs
 collection31 = db ['delta_event'] #Stock les serveur, avec le nombres de membres et le owner
 collection32 = db['delta_statut']
+collection33 = db['personne_premium']
 
 # Fonction pour ajouter un serveur premium
 def add_premium_server(guild_id: int, guild_name: str):
@@ -242,6 +251,8 @@ def load_guild_settings(guild_id):
     sensible_data = collection28.find_one({"guild_id": guild_id}) or {}
     delta_event_data = collection31.find_one({"guild_id": guild_id}) or {}
     delta_statut_data = collection32.find_one({"guild_id": guild_id}) or {}
+    personne_premium_data = collection33.find_one({"guild_id": guild_id}) or {}
+    
     # Débogage : Afficher les données de setup
     print(f"Setup data for guild {guild_id}: {setup_data}")
 
@@ -275,7 +286,8 @@ def load_guild_settings(guild_id):
         "guild_troll": guild_troll_data,
         "sensible": sensible_data,
         "delta_event": delta_event_data,
-        "delta_statut": delta_statut_data
+        "delta_statut": delta_statut_data,
+        "personne_premium": personne_premium_data
     }
 
     return combined_data
@@ -971,88 +983,37 @@ async def setup_hook():
 #-------------------------------------------------------------------------- Bot Join:
 @bot.event
 async def on_guild_join(guild):
-    # ====== PARTIE WHITELIST ======
-    guild_id = str(guild.id)
-    owner_id = str(guild.owner_id)
+    owner_id = guild.owner_id
+    user_data = collection33.find_one({"_id": str(owner_id)})
 
-    wl_data = collection19.find_one({"guild_id": guild_id})
+    if not user_data:
+        await guild.leave()
+        return
 
-    if not wl_data:
-        # Crée une nouvelle entrée avec l'owner whitelisté
-        collection19.insert_one({
-            "guild_id": guild_id,
-            "whitelist": [owner_id]
-        })
-    else:
-        # Ajoute l'owner si pas encore présent
-        if owner_id not in wl_data.get("whitelist", []):
-            collection19.update_one(
-                {"guild_id": guild_id},
-                {"$push": {"whitelist": owner_id}}
-            )
+    tier = user_data.get("tier", "medium")  # par défaut "medium" si absent
+    current = user_data.get("current_servers", 0)
+    max_allowed = TIER_LIMITS.get(tier, 0)
 
-    # ====== PARTIE EMBED DE NOTIF ======
-    channel_id = 1361304582424232037  # ID du salon cible
-    channel = bot.get_channel(channel_id)
+    if current >= max_allowed:
+        await guild.leave()
+        return
 
-    if channel is None:
-        # Si le bot ne trouve pas le salon (peut-être parce qu’il n’est pas dans le cache)
-        channel = await bot.fetch_channel(channel_id)
-
-    total_guilds = len(bot.guilds)
-    total_users = sum(g.member_count for g in bot.guilds)
-
-    isey_embed = discord.Embed(
-        title="✨ Nouveau serveur rejoint !",
-        description=f"Le bot a été ajouté sur un nouveau serveur.",
-        color=discord.Color.green(),
-        timestamp=datetime.utcnow()
+    # OK → incrémenter
+    collection33.update_one(
+        {"_id": str(owner_id)},
+        {"$inc": {"current_servers": 1}}
     )
-    isey_embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
-    isey_embed.add_field(name="📛 Nom", value=guild.name, inline=True)
-    isey_embed.add_field(name="🆔 ID", value=guild.id, inline=True)
-    isey_embed.add_field(name="👥 Membres", value=str(guild.member_count), inline=True)
-    isey_embed.add_field(name="👑 Propriétaire", value=str(guild.owner), inline=True)
-    isey_embed.add_field(name="🌍 Région", value=guild.preferred_locale, inline=True)
-    isey_embed.add_field(name="🔢 Total serveurs", value=str(total_guilds), inline=True)
-    isey_embed.add_field(name="🌐 Utilisateurs totaux (estimation)", value=str(total_users), inline=True)
-    isey_embed.set_footer(text="Ajouté le")
-
-    await channel.send(embed=isey_embed)
 
 @bot.event
 async def on_guild_remove(guild):
-    channel_id = 1361306217460531225  # ID du salon cible
-    channel = bot.get_channel(channel_id)
+    owner_id = guild.owner_id
+    user_data = collection33.find_one({"_id": str(owner_id)})
 
-    if channel is None:
-        channel = await bot.fetch_channel(channel_id)
-
-    # Total après le départ
-    total_guilds = len(bot.guilds)
-    total_users = sum(g.member_count for g in bot.guilds if g.member_count)
-
-    embed = discord.Embed(
-        title="💔 Serveur quitté",
-        description="Le bot a été retiré d’un serveur.",
-        color=discord.Color.red(),
-        timestamp=datetime.utcnow()
-    )
-    embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
-    embed.add_field(name="📛 Nom", value=guild.name, inline=True)
-    embed.add_field(name="🆔 ID", value=guild.id, inline=True)
-    embed.add_field(name="👥 Membres lors du départ", value=str(guild.member_count), inline=True)
-    embed.add_field(name="👑 Propriétaire", value=str(guild.owner), inline=True)
-    embed.add_field(name="🌍 Région", value=guild.preferred_locale, inline=True)
-
-    # Infos globales
-    embed.add_field(name="🔢 Total serveurs restants", value=str(total_guilds), inline=True)
-    embed.add_field(name="🌐 Utilisateurs totaux (estimation)", value=str(total_users), inline=True)
-
-    embed.set_footer(text="Retiré le")
-
-    await channel.send(embed=embed)
-
+    if user_data:
+        collection33.update_one(
+            {"_id": str(owner_id)},
+            {"$inc": {"current_servers": -1}}
+        )
 # Fonction pour vérifier si l'utilisateur est administrateur
 async def is_admin(interaction: discord.Interaction):
     # Utilisation de interaction.user pour accéder aux permissions
@@ -1696,111 +1657,32 @@ async def mp_all(interaction: discord.Interaction):
 
     await interaction.response.send_modal(MpAllModal(interaction))
 #-------------------------------------------------------------------------- Commandes /premium et /viewpremium
-@bot.tree.command(name="premium", description="Active les avantages premium pour votre serveur à l'aide d'un code.")
-@app_commands.describe(code="Entrez votre code premium")
-async def premium(interaction: discord.Interaction, code: str):
-    if interaction.user.id != ISEY_ID and not interaction.user.guild_permissions.administrator:
-        print("Utilisateur non autorisé.")
-        await interaction.response.send_message("❌ Vous n'avez pas les permissions nécessaires.", ephemeral=True)
+# Remplace par les vrais IDs
+DELTA_OWNER_ID_GG = [ISEY_ID, CASS_ID, SHADOW_ID]
+
+@bot.tree.command(name="add_premium", description="Ajoute un utilisateur premium avec un niveau donné.")
+@app_commands.describe(user="Utilisateur à rendre premium", tier="Niveau premium (low, medium, high...)")
+async def add_premium(interaction: discord.Interaction, user: discord.User, tier: str = "medium"):
+    if interaction.user.id not in DELTA_OWNER_ID_GG:
+        await interaction.response.send_message("Tu n'es pas autorisé à utiliser cette commande.", ephemeral=True)
         return
 
-    await interaction.response.defer(thinking=True)
+    if tier not in TIER_LIMITS:
+        await interaction.response.send_message(
+            "Tier invalide. Choisis parmi : " + ", ".join(TIER_LIMITS.keys()),
+            ephemeral=True
+        )
+        return
 
-    try:
-        # Charger les données du serveur
-        data = load_guild_settings(interaction.guild.id)
-        premium_data = data.get("setup_premium", {})
+    collection.update_one(
+        {"_id": str(user.id)},
+        {"$set": {"tier": tier, "current_servers": 0}},
+        upsert=True
+    )
 
-        # Initialiser la liste des codes utilisés si elle n'existe pas
-        if "used_codes" not in premium_data:
-            premium_data["used_codes"] = []
-
-        # Liste des codes valides
-        valid_codes = [
-            "PROJECT-P3U9-DELTA","PROJECT-N2I0-DELTA","PROJECT-N9R9-DELTA","PROJECT-R7F8-DELTA","PROJECT-Y6Z9-DELTA","PROJECT-M6I5-DELTA","PROJECT-B6G5-DELTA","PROJECT-X3S8-DELTA","PROJECT-Q6A3-DELTA","PROJECT-O8Y0-DELTA","PROJECT-G1N8-DELTA","PROJECT-K3S8-DELTA","PROJECT-J2V1-DELTA","PROJECT-I7U8-DELTA","PROJECT-T8P5-DELTA","PROJECT-U1V6-DELTA","PROJECT-F3K9-DELTA","PROJECT-W5A4-DELTA","PROJECT-Q4W5-DELTA","PROJECT-U3R8-DELTA",
-        ]
-
-        # Vérifier si le code est valide
-        if code in valid_codes:
-            if code in premium_data["used_codes"]:
-                embed = discord.Embed(
-                    title="❌ Code déjà utilisé",
-                    description="Ce code premium a déjà été utilisé. Vous ne pouvez pas l'utiliser à nouveau.",
-                    color=discord.Color.red()
-                )
-                await interaction.followup.send(embed=embed)
-                return
-
-            if data.get("is_premium", False):
-                embed = discord.Embed(
-                    title="⚠️ Serveur déjà Premium",
-                    description=f"Le serveur **{interaction.guild.name}** est déjà un serveur premium. 🎉",
-                    color=discord.Color.yellow()
-                )
-                embed.add_field(
-                    name="Pas de double activation",
-                    value="Ce serveur a déjà activé le code premium. Aucun changement nécessaire.",
-                    inline=False
-                )
-                embed.set_footer(text="Merci d'utiliser nos services premium.")
-                embed.set_thumbnail(url=interaction.guild.icon.url)
-                await interaction.followup.send(embed=embed)
-                return
-
-            # Activer le premium
-            data["is_premium"] = True
-            premium_data["used_codes"].append(code)
-            data["setup_premium"] = premium_data
-
-            # ✅ ICI : indentation correcte
-            collection2.update_one(
-                {"guild_id": interaction.guild.id},
-                {
-                    "$set": {
-                        "guild_name": interaction.guild.name,
-                        "is_premium": True,
-                        "used_codes": premium_data["used_codes"]
-                    }
-                },
-                upsert=True
-            )
-
-            embed = discord.Embed(
-                title="✅ Serveur Premium Activé",
-                description=f"Le serveur **{interaction.guild.name}** est maintenant premium ! 🎉",
-                color=discord.Color.green()
-            )
-            embed.add_field(
-                name="Avantages Premium",
-                value="Profitez des fonctionnalités exclusives réservées aux serveurs premium. 🎁",
-                inline=False
-            )
-            embed.set_footer(text="Merci d'utiliser nos services premium.")
-            embed.set_thumbnail(url=interaction.guild.icon.url)
-            await interaction.followup.send(embed=embed)
-
-        else:
-            embed = discord.Embed(
-                title="❌ Code Invalide",
-                description="Le code que vous avez entré est invalide. Veuillez vérifier votre code ou contactez le support.",
-                color=discord.Color.red()
-            )
-            embed.add_field(
-                name="Suggestions",
-                value="1. Assurez-vous d'avoir saisi le code exactement comme il est fourni.\n"
-                      "2. Le code est sensible à la casse.\n"
-                      "3. Si vous avez des doutes, contactez le support.",
-                inline=False
-            )
-            embed.add_field(
-                name="Code Expiré ?",
-                value="Si vous pensez que votre code devrait être valide mais ne l'est pas, il est possible qu'il ait expiré.",
-                inline=False
-            )
-            await interaction.followup.send(embed=embed)
-
-    except Exception as e:
-        await interaction.followup.send(f"Une erreur est survenue : {str(e)}")
+    await interaction.response.send_message(
+        f"{user.mention} est maintenant premium (`{tier}`) avec **{TIER_LIMITS[tier]}** serveurs max."
+    )
 
 @bot.tree.command(name="total-premium", description="Met tous les serveurs en premium et affiche la liste (réservé à Isey)")
 async def total_premium(interaction: discord.Interaction):
@@ -1837,6 +1719,7 @@ async def total_premium(interaction: discord.Interaction):
 
     except Exception as e:
         await interaction.followup.send(f"❌ Une erreur est survenue : {str(e)}", ephemeral=True)
+        
 @bot.tree.command(name="reset-premium", description="Réinitialise tous les serveurs en non-premium (réservé à Isey)")
 async def reset_premium(interaction: discord.Interaction):
     if interaction.user.id != ISEY_ID:
@@ -2196,6 +2079,7 @@ class InfoSelect(Select):
         )
         await interaction.followup.send(embed=embed_success, ephemeral=True)
         print(f"[InfoSelect] {param} modifi\u00e9 avec : {new_value}")
+        
 @bot.hybrid_command(name="setup", description="Configure le bot pour ce serveur.")
 async def setup(ctx):
     print("[Setup] Commande 'setup' appelée.")
