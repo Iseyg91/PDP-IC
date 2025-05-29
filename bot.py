@@ -974,8 +974,7 @@ async def send_alert_to_admin(message, detected_word):
         view.message_embed = embed
 
         # Envoi de l'alerte (avec mention pour les premium)
-            await channel.send("<@&1362339333658382488> 🚨 Un mot sensible a été détecté !")
-        await channel.send(embed=embed, view=view)
+        await channel.send("<@&1362339333658382488> 🚨 Un mot sensible a été détecté !")
 
     except Exception as e:
         print(f"⚠️ Erreur envoi alerte : {e}")
