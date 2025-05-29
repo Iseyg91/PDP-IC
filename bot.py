@@ -159,6 +159,7 @@ collection28 = db['sensible'] #Stock les mots sensibles actif des serveurs
 collection31 = db ['delta_event'] #Stock les serveur, avec le nombres de membres et le owner
 collection32 = db['delta_statut']
 collection33 = db['personne_premium']
+collection34 = db['deltap_statut']
 
 # Fonction pour ajouter un serveur premium
 def add_premium_server(guild_id: int, guild_name: str):
@@ -252,6 +253,7 @@ def load_guild_settings(guild_id):
     delta_event_data = collection31.find_one({"guild_id": guild_id}) or {}
     delta_statut_data = collection32.find_one({"guild_id": guild_id}) or {}
     personne_premium_data = collection33.find_one({"guild_id": guild_id}) or {}
+    deltap_statut_data = collection34.find_one({"guild_id": guild_id}) or {}
     
     # Débogage : Afficher les données de setup
     print(f"Setup data for guild {guild_id}: {setup_data}")
@@ -287,7 +289,8 @@ def load_guild_settings(guild_id):
         "sensible": sensible_data,
         "delta_event": delta_event_data,
         "delta_statut": delta_statut_data,
-        "personne_premium": personne_premium_data
+        "personne_premium": personne_premium_data,
+        "deltap_statut": deltap_statut_data
     }
 
     return combined_data
@@ -415,7 +418,7 @@ async def update_status_embed():
         print("Salon introuvable.")
         return
 
-    statut_data = collection32.find_one({"_id": "statut_embed"})
+    statut_data = collection34.find_one({"_id": "statut_embed"})
     message_id = statut_data.get("message_id") if statut_data else None
 
     total_members = sum(g.member_count for g in bot.guilds)
@@ -521,7 +524,7 @@ async def update_status_embed():
             await msg.edit(embed=embed, attachments=[file])
         else:
             msg = await channel.send(embed=embed, file=file)
-            collection32.update_one(
+            collection34.update_one(
                 {"_id": "statut_embed"},
                 {"$set": {"message_id": msg.id}},
                 upsert=True
@@ -533,7 +536,7 @@ async def update_status_embed():
 
     # Gestion des alertes critiques
     if alert_triggered:
-        alert_doc = collection32.find_one({"_id": "critical_alert"})
+        alert_doc = collection34.find_one({"_id": "critical_alert"})
         if not alert_doc:
             mention_roles = "<@&1376821268447236248> <@&1361306900981092548>"
             alert_embed = discord.Embed(
@@ -557,13 +560,13 @@ async def update_status_embed():
                 embed=alert_embed,
                 allowed_mentions=discord.AllowedMentions(roles=True)
             )
-            collection32.update_one(
+            collection34.update_one(
                 {"_id": "critical_alert"},
                 {"$set": {"message_id": alert_msg.id}},
                 upsert=True
             )
     else:
-        alert_doc = collection32.find_one({"_id": "critical_alert"})
+        alert_doc = collection34.find_one({"_id": "critical_alert"})
         if alert_doc and "message_id" in alert_doc:
             try:
                 alert_msg = await channel.fetch_message(alert_doc["message_id"])
@@ -587,7 +590,7 @@ async def update_status_embed():
     last_update_str = now.strftime("%d/%m/%Y à %H:%M:%S")
     update_text = f"<a:heart_d:1376837986381205535> **Dernière mise à jour :** {last_update_str}\n"
 
-    update_data = collection32.find_one({"_id": "update_info"})
+    update_data = collection34.find_one({"_id": "update_info"})
     update_message_id = update_data.get("message_id") if update_data else None
 
     try:
@@ -596,7 +599,7 @@ async def update_status_embed():
             await update_msg.edit(content=update_text)
         else:
             update_msg = await channel.send(content=update_text)
-            collection32.update_one(
+            collection34.update_one(
                 {"_id": "update_info"},
                 {"$set": {"message_id": update_msg.id}},
                 upsert=True
