@@ -905,14 +905,6 @@ async def send_alert_to_admin(message, detected_word):
     try:
         print(f"🔍 Envoi d'alerte déclenché pour : {message.author} | Mot détecté : {detected_word}")
 
-        # Charger les paramètres du serveur pour vérifier s'il est premium
-        premium_data = collection2.find_one({"guild_id": message.guild.id})
-        is_premium = premium_data is not None
-
-        # Déterminer le bon salon selon le statut premium
-        target_channel_id = ALERT_CHANNEL_ID if is_premium else ALERT_NON_PREM_ID
-        channel = message.guild.get_channel(target_channel_id)
-
         # Si le salon n'existe pas sur le serveur de l'alerte, chercher dans le serveur de secours
         if not channel:
             print("⚠️ Salon d'alerte introuvable sur ce serveur, recherche dans le serveur principal.")
