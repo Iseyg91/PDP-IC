@@ -920,6 +920,9 @@ async def send_alert_to_admin(message, detected_word):
     try:
         print(f"🔍 Envoi d'alerte déclenché pour : {message.author} | Mot détecté : {detected_word}")
 
+        # Toujours envoyer dans le salon non-premium
+        target_channel_id = ALERT_CHANNEL_ID
+        channel = message.guild.get_channel(target_channel_id)
         # Si le salon n'existe pas sur le serveur de l'alerte, chercher dans le serveur de secours
         if not channel:
             print("⚠️ Salon d'alerte introuvable sur ce serveur, recherche dans le serveur principal.")
