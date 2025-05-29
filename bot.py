@@ -578,7 +578,7 @@ async def update_status_embed():
             collection32.delete_one({"_id": "critical_alert"})
 
     # Mise à jour du nom du salon
-    new_name = f"︱{status['channel_emoji']}・𝖲tatut"
+    new_name = f"︱{status['channel_emoji']}・𝖲tatut-𝖯remium"
     if channel.name != new_name:
         try:
             await channel.edit(name=new_name)
